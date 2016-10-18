@@ -1,0 +1,158 @@
+'инцилизируем датчики
+Sensor.SetMode(1,0)
+Sensor.SetMode(2,0)
+mb = Motor.GetCount("B")
+mc = Motor.GetCount("C")
+Motor.Start("BC",-3)
+Program.Delay(5000)
+Motor.Start("BC",0)
+Motor.ResetCount("BC")
+drum_start = 45
+Motor.Move("BC",50,drum_start,"true")
+Speaker.Note(100,"B7",200)
+Program.Delay(200)
+  
+drum1 = "False"
+drum2 = "False"
+reg1 = drum_start 
+reg2 = drum_start
+k = 0.8
+drum1_time = EV3.Time
+drum2_time = EV3.Time
+
+Sub Drums
+  While "True"
+    If drum1 = "True" Then
+      reg1 = 0
+    Else  
+      reg1 = drum_start                  
+    EndIf
+    
+    If drum2 = "True" Then
+      reg2 = 0
+    Else  
+      reg2 = drum_start
+    EndIf
+    
+    e1 = reg1 - Motor.GetCount("B")
+    v1 = e1 * k
+    If Math.Abs(Motor.GetCount("B")) > 40 And drum1 = "False" Then
+      Motor.Stop("B","False")
+    Else  
+      Motor.Start("B",v1)
+    EndIf
+    
+    e2 = reg2 - Motor.GetCount("C")
+    v2 = e2 * k
+    If Math.Abs(Motor.GetCount("C")) > 40 And drum2 = "False" Then
+      Motor.Stop("C","False")
+    Else     
+      Motor.Start("C",v2)  
+    EndIf
+    
+    If Motor.GetCount("B") < 10 Or EV3.Time - drum1_time > 250 Then
+      drum1 = "False"
+    EndIf
+
+    If Motor.GetCount("C") < 10 Or EV3.Time - drum2_time > 250 Then
+      drum2 = "False"
+    EndIf
+  EndWhile
+EndSub
+
+Thread.Run = Drums  
+
+n1 = 0
+n2 = 0
+tn = 0
+tc = 0
+d = EV3.Time
+n = 0
+trigger1 = "False"
+trigger2 = "False"
+While EV3.Time < d + 10000 
+  If Sensor.ReadPercent(1) = 100 And trigger1 = "False" Then
+    If n = 0 Then
+      n = EV3.Time
+    EndIf  
+    trigger1 = "True"
+    b1[n1] = EV3.Time - n   
+    n1 = n1 + 1
+  Else
+    If Sensor.ReadPercent(1) = 0 Then   
+      trigger1 = "False"
+    EndIf
+  EndIf  
+  If Sensor.ReadPercent(2) = 100 And trigger2 = "False" Then
+    If n = 0 Then
+      n = EV3.Time
+    EndIf    
+    trigger2 = "True"
+    b2[n2] = EV3.Time - n
+    n2 = n2 + 1
+  Else
+    If Sensor.ReadPercent(2) = 0  Then
+      trigger2 = "False"
+    EndIf
+  EndIf    
+EndWhile
+
+If b1[0] < b2[0] Then
+  tn = b1[0]  
+Else  
+  tn = b2[0]
+EndIf  
+If b1[n1-1] > b2[n2-1] Then
+  tc = b1[n1-1]  
+Else  
+  tc = b2[n2-1]
+EndIf  
+dt = tc - tn  
+'выводим значения на экран
+LCD.Clear()
+LCD.Text (1, 0, 0, 2, dt)
+LCD.Text (1, 0, 20, 2, tn)
+LCD.Text (1, 0, 40, 2, tc)
+Program.Delay(5000)
+For r = 0 To 16
+  d1[r] = 0
+  d2[r] = 0
+EndFor  
+For e = 0 To n1 - 1
+  d1[Math.Round(b1[e]/dt*16)] = 1
+EndFor
+For e2 = 0 To n2 - 1
+  d2[Math.Round(b2[e2]/dt*16)] = 1
+EndFor
+
+LCD.Clear()
+
+x = 0
+y = 0
+For u = 0 To 16
+  LCD.Text(1,x,y,1,d1[u])
+  x = x + 10
+EndFor  
+x2 = 0
+y2 = 10
+For u2 = 0 To 16
+  LCD.Text(1,x2,y2,1,d2[u2])
+  x2 = x2 + 10
+EndFor    
+Program.Delay(5000)  
+
+While "True"
+  'Speaker.Note(100,"A",dt/4)  
+  For i = 0 To 15
+    If d1[i] = 1  Then 
+      drum1 = "True"
+      drum1_time = EV3.Time
+    EndIf
+    If d2[i] = 1  Then 
+      drum2 = "True"
+      drum2_time = EV3.Time    
+    EndIf
+  Program.Delay(dt/16)
+  EndFor
+EndWhile
+

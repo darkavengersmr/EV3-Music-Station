@@ -1,0 +1,224 @@
+'инцилизируем датчики
+Sensor.SetMode(1,0)
+Sensor.SetMode(2,0)
+mb = Motor.GetCount("B")
+mc = Motor.GetCount("C")
+Motor.Start("BC",-3)
+Program.Delay(5000)
+Motor.Start("BC",0)
+Motor.ResetCount("BC")
+drum_start = 45
+Motor.Move("BC",50,drum_start,"true")
+Program.Delay(200)
+
+drum1 = "False"
+drum2 = "False"
+reg1 = drum_start 
+reg2 = drum_start
+k = 1
+tak_now = 0
+nak_now = 0
+repeat = 0
+drum1_time = EV3.Time
+drum2_time = EV3.Time
+
+Sub Drums
+  While "True"
+    If drum1 = "True" Then
+      reg1 = 0
+    Else  
+      reg1 = drum_start                  
+    EndIf
+    
+    If drum2 = "True" Then
+      reg2 = 0
+    Else  
+      reg2 = drum_start
+    EndIf
+    
+    e1 = reg1 - Motor.GetCount("B")
+    v1 = e1 * k
+    If Math.Abs(Motor.GetCount("B")) > 40 And drum1 = "False" Then
+      Motor.Stop("B","True")
+    Else  
+      Motor.Start("B",v1)
+    EndIf
+    
+    e2 = reg2 - Motor.GetCount("C")
+    v2 = e2 * k
+    If Math.Abs(Motor.GetCount("C")) > 40 And drum2 = "False" Then
+      Motor.Stop("C","True")
+    Else     
+      Motor.Start("C",v2)  
+    EndIf
+    
+    e3 = Math.Remainder(tak_now - Motor.GetCount("A") + 540 , 360) - 180
+    v3 = e3 * k
+    If Math.Abs(e3) < 10 Then
+      Motor.Stop("A","True")
+    Else     
+      Motor.Start("A",v3)  
+    EndIf
+    
+    e4 = Math.Remainder(nak_now - Motor.GetCount("D") + 540 , 360) - 180
+    v4 = e4 * k
+    If Math.Abs(e4) < 10 Then
+      Motor.Stop("D","True")
+    Else     
+      Motor.Start("D",v4)  
+    EndIf    
+    
+    If Motor.GetCount("B") < 10 Or EV3.Time - drum1_time > 250 Then
+      drum1 = "False"
+    EndIf
+    
+    If Motor.GetCount("C") < 10 Or EV3.Time - drum2_time > 250 Then
+      drum2 = "False"
+    EndIf
+  EndWhile
+EndSub
+
+Thread.Run = Drums  
+
+' Массивы для хранения аккордов (tak - тоники аккордов, nak - надстройки)
+For i = 0 To 360
+  tak[i] = "nodata"
+  nak[i] = "nodata"  
+EndFor
+
+tak[0] = "C"
+tak[30] = "d"
+tak[60] = "D"
+tak[90] = "e"
+tak[120] = "E"
+tak[150] = "f"
+tak[180] = "F"
+tak[210] = "G"
+tak[240] = "a"
+tak[270] = "A"
+tak[300] = "b"
+tak[330] = "B"
+
+nak[0] = "  "
+nak[40] = "m "
+nak[80] = "7 "
+nak[120] = "m7"
+nak[160] = "5 "
+
+' Открываем файл для чтения
+'MyFile = EV3File.OpenRead("/home/root/lms2012/prjs/ev3mustat/sadbuttrue.txt")
+'MyFile = EV3File.OpenRead("/home/root/lms2012/prjs/ev3mustat/entersandman.txt")
+'MyFile = EV3File.OpenRead("/home/root/lms2012/prjs/ev3mustat/asol.txt")
+MyFile = EV3File.OpenRead("/home/root/lms2012/prjs/ev3mustat/kuznec.txt")
+'Считываем темп песни (BPM — это количество четвертных нот в минуту)
+bpm = EV3File.ConvertToNumber(EV3File.ReadLine(MyFile))
+' Вычисляем длительность такта
+dt = 60/(bpm/4)
+
+' Считываем размер (4/4, 3/4 и т.п. - число долей в такте)
+size = EV3File.ReadLine(MyFile)
+
+num = 0
+EOF = "True"
+
+While EOF
+  
+  ' Считываем номер такта, он нигде не используется - является визуальным разделителем. Конец файла - такт 999
+  num = EV3File.ConvertToNumber(EV3File.ReadLine(MyFile))
+  
+  If num <> 999 Then
+    repeat = num  
+    ' Считываем барабанные ритмы, хранящиеся в двух строках в виде 16-х "1000100010101000"
+    str1 = EV3File.ReadLine(MyFile)
+    str2 = EV3File.ReadLine(MyFile)
+    ' Считываем мелодию, хранится в третьей строке каждого такта в виде "C4  4  D#4 4  E4  8  Ps  8  Ps  4 "
+    ' В строке хранятся 7-символьные последовательности, первые 3 символа - высота ноты (С4, D#6), 5 и 6 символы - длительность ноты
+    str3 = EV3File.ReadLine(MyFile)    
+    ' Считываем гармонию, хранится в 4-й строке каждого такта в виде "Ps  2  Am7 4  F7  4  "
+    ' 7-символьная последовательность, 1q символ - тоника аккорда (A - "A", Аb - "a"), затем 2 символа - надстройка ("7 " "m7", 6 и 7 символы - длительность    
+    str4 = EV3File.ReadLine(MyFile)
+    
+    ' Заполняем массивы d1 и d2 нулями и единицами - 1 - удар барабана в 16-й доле такта
+    For i = 1 To 16 
+      d1[(num-1)*16+(i-1)] = EV3File.ConvertToNumber(Text.GetSubText(str1,i,1))
+      d2[(num-1)*16+(i-1)] = EV3File.ConvertToNumber(Text.GetSubText(str2,i,1))
+    EndFor
+    
+    
+    ' Заполняем массивы vn (высота ноты) и vd (длительность), обнулив их предварительно (заполнив 16-ми паузами)
+    For i = 0 To 15
+      vn[(num-1)*16+i] = "Ps"
+      vd[(num-1)*16+i] = 16
+    EndFor
+    
+    c = 0
+    For i = 0 To Math.Round(Text.GetLength(str3)/7) - 1
+      If Text.GetSubText(str3,i*7+1,2) <> "Ps" Then 
+        vn[(num-1)*16+c] = Text.GetSubText(str3,i*7+1,3)
+        If Text.GetSubText(vn[(num-1)*16+c],3,1) = " " Then 
+          vn[(num-1)*16+c] = Text.GetSubText(vn[(num-1)*16+c],1,2)
+        EndIf
+        vd[(num-1)*16+c] = dt * 1000 / EV3File.ConvertToNumber(Text.GetSubText(str3,i*7+5,2))        
+      EndIf
+      c = c + 16 / EV3File.ConvertToNumber(Text.GetSubText(str3,i*7+5,2))
+    EndFor
+    
+    ' Заполняем массивы gtak (тоники аккордов гармонии) и gnak (надстройки аккордов гармонии), обнулив их предварительно (заполнив "nodata")
+    For i = 0 To 15
+      gtak[(num-1)*16+i] = "Ps"
+      gnak[(num-1)*16+i] = "Ps"
+    EndFor
+    
+    c = 0
+    For i = 0 To Math.Round(Text.GetLength(str4)/7) - 1
+      If Text.GetSubText(str4,i*7+1,2) <> "Ps" Then 
+        gtak[(num-1)*16+c] = Text.GetSubText(str4,i*7+1,1)
+        gnak[(num-1)*16+c] = Text.GetSubText(str4,i*7+2,2)
+        vd[(num-1)*16+c] = dt * 1000 / EV3File.ConvertToNumber(Text.GetSubText(str4,i*7+5,2))        
+      EndIf
+      c = c + 16 / EV3File.ConvertToNumber(Text.GetSubText(str4,i*7+5,2))
+    EndFor
+  Else
+    EOF = "False"
+  EndIf  
+  
+EndWhile
+
+While "True"
+  For r = 1 To repeat
+   LCD.Clear()
+   LCD.Text (1, 0, 0, 2, r)    
+    ' Воспроизведение такта
+    For i = 0 To 15      
+      ' Воспроизводим ритм
+      If d1[(r-1)*16+i] = 1  Then 
+        drum1 = "True"
+        drum1_time = EV3.Time
+      EndIf
+      If d2[(r-1)*16+i] = 1  Then 
+        drum2 = "True" 
+        drum2_time = EV3.Time   
+      EndIf
+      
+      ' Воспроизводим голос
+      If vn[(r-1)*16+i] <> "Ps" Then
+        Speaker.Note(100,vn[(r-1)*16+i],vd[(r-1)*16+i])  
+      EndIf
+      
+      ' Отображаем гармонию
+      For a = 0 To 360 Step 10
+        If tak[a] = gtak[(r-1)*16+i]  Then
+          tak_now = a
+        EndIf          
+        If nak[a] = gnak[(r-1)*16+i]  Then
+          nak_now = a
+        EndIf  
+      EndFor
+      
+      Program.Delay(dt*1000/16)
+    EndFor
+  EndFor
+  
+EndWhile    
+
+EV3File.Close(MyFile)
